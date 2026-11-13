@@ -39,8 +39,8 @@ Useful options:
 --font Caveat|IndieFlower|NothingYouCouldDo|ReenieBeanie|RockSalt|path/to/font.ttf
 --paper lined|blank|grid      --ink blue|black|pencil|red|gel-blue
 --messiness 1.0   0 = font-perfect, 1 = normal, 1.5-2 = rushed
---fatigue 0.6     how much worse the bottom of the page gets
---mistakes 0.012  per-word chance of a crossed-out typo (0 to disable)
+--fatigue 0.25    how much worse the bottom of the page gets
+--mistakes 0.006  per-word chance of a crossed-out typo (0 to disable)
 --slant 4         degrees, positive leans right
 --size 2.4        x-height in mm      --line-spacing 7.1  (mm, college ruled)
 --weight 0        -0.2 thin .. 0.2 thick
