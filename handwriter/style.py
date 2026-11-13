@@ -33,8 +33,8 @@ class Style:
 
     # the human part
     messiness: float = 1.0  # global multiplier for all randomness
-    fatigue: float = 0.6  # how much messier the bottom of a page is than the top
-    mistakes: float = 0.012  # per-word chance of a crossed-out misspelling
+    fatigue: float = 0.25  # how much messier the bottom of a page is than the top
+    mistakes: float = 0.006  # per-word chance of a crossed-out misspelling
 
     # ink
     ink: str = "blue"
@@ -43,19 +43,19 @@ class Style:
     pressure_variation: float = 1.0
 
     # per-glyph variation (in x-heights / degrees), before messiness
-    glyph_scale_jitter: float = 0.035
-    glyph_rotation_jitter: float = 1.8
-    glyph_slant_jitter: float = 2.5
-    glyph_baseline_jitter: float = 0.045
-    glyph_spacing_jitter: float = 0.07
-    glyph_warp: float = 0.055
-    glyph_squash: float = 0.04
+    glyph_scale_jitter: float = 0.018
+    glyph_rotation_jitter: float = 0.7
+    glyph_slant_jitter: float = 1.2
+    glyph_baseline_jitter: float = 0.018
+    glyph_spacing_jitter: float = 0.04
+    glyph_warp: float = 0.03
+    glyph_squash: float = 0.025
 
     # per-line drift
-    line_angle_deg: float = 0.5
-    baseline_wave: float = 0.08
-    size_wave: float = 0.05
-    slant_wave_deg: float = 3.0
+    line_angle_deg: float = 0.3
+    baseline_wave: float = 0.05
+    size_wave: float = 0.035
+    slant_wave_deg: float = 1.5
 
     extra: dict = field(default_factory=dict)
 
