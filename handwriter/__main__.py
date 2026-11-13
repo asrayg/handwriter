@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import INKS, Style, generate
+from . import INKS, PENS, Style, generate
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
 
@@ -19,6 +19,9 @@ def main(argv=None):
     p.add_argument("--seed", type=int, help="random seed (same seed = same page)")
     p.add_argument("--paper", choices=["lined", "blank", "grid"], default="lined")
     p.add_argument("--ink", choices=list(INKS), default="blue")
+    p.add_argument("--pen", choices=list(PENS), default="ballpoint", help="instrument physics")
+    p.add_argument("--pen-defects", type=float, default=1.0, help="0 = flawless pen, 1 = normal, 2 = cheap pen")
+    p.add_argument("--habits", type=float, default=1.0, help="strength of the writer's personal quirks")
     p.add_argument("--messiness", type=float, default=1.0, help="0 = font-perfect, 1 = normal, 2 = rushed")
     p.add_argument("--fatigue", type=float, default=0.25, help="how much worse it gets down the page")
     p.add_argument("--mistakes", type=float, default=0.006, help="chance per word of a crossed-out typo")
@@ -26,7 +29,7 @@ def main(argv=None):
     p.add_argument("--size", type=float, default=2.4, help="x-height in mm")
     p.add_argument("--line-spacing", type=float, default=7.1, help="mm between ruled lines")
     p.add_argument("--weight", type=float, default=0.0, help="-0.2 thin .. 0.2 thick")
-    p.add_argument("--dpi", type=int, default=200)
+    p.add_argument("--dpi", type=int, default=300)
     p.add_argument("--no-scan", action="store_true", help="skip page tilt/lighting/grain")
     p.add_argument("--list-fonts", action="store_true")
     a = p.parse_args(argv)
@@ -54,7 +57,7 @@ def main(argv=None):
     st = Style(
         font=font, seed=a.seed, paper=a.paper, ink=a.ink, messiness=a.messiness, fatigue=a.fatigue,
         mistakes=a.mistakes, slant_deg=a.slant, x_height_mm=a.size, line_spacing_mm=a.line_spacing,
-        weight=a.weight, dpi=a.dpi, scan=not a.no_scan,
+        weight=a.weight, dpi=a.dpi, pen=a.pen, pen_defects=a.pen_defects, habits=a.habits, scan=not a.no_scan,
     )
     pages = generate(text, st)
 

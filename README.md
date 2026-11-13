@@ -1,22 +1,37 @@
 # handwriter
 
-Turns text into handwriting that looks like a real person wrote it, not like a font.
+Turns text into handwriting that looks like a real person wrote it with a real pen, not like a font.
 
-Handwriting fonts look fake because every "a" is identical, every line is perfectly straight, and the ink is perfectly uniform. handwriter uses a font only as a skeleton, then deforms **every glyph instance differently** and adds the mess a real hand makes:
+Handwriting fonts look fake because every "a" is identical, every line is perfectly straight, and the ink is a flat, perfect fill. handwriter uses a font only as a skeleton. It writes as one consistent but imperfect **writer**, using a physically modelled **pen**.
 
-| Real-hand trait | How it's simulated |
+## The writer
+
+Variation happens in three layers, the same way it does in real handwriting:
+
+| Layer | What varies |
 |---|---|
-| No two letters identical | each glyph gets its own random smooth warp field, scale, squash, rotation, slant |
-| Wandering baseline | per-line smooth drift + line tilt + per-letter bounce |
-| Inconsistent size & slant | slow drift along each line |
-| Uneven spacing | jittered letter and word gaps, ragged right margin |
-| Pen pressure | stroke thickness *and* darkness vary smoothly across the page |
-| Ink on paper | multiply blend (ruled lines show through), fibre bleed, paper tooth (strong for pencil) |
-| Fatigue | writing gets messier toward the bottom of each page |
-| Mistakes | the occasional misspelled word, scribbled out and rewritten |
-| Scanned look | slight page tilt, uneven lighting, sensor grain |
+| **Personal habits** (fixed for the whole document) | 2 personal variants of every letter, used in a habitual ratio · where the i/j dots land (usually right and high), and whether they're dots or little flicks · words trailing off (last letter smaller, drifting up or down) · first letter slightly bigger |
+| **Slow drift** (per line) | baseline wander, line tilt, size and slant drift · fatigue: messier toward the bottom of the page |
+| **Instance noise** (per letter) | small warp, scale, rotation, spacing jitter · hand tremor that roughens stroke edges |
 
-Hairline fonts are automatically thickened to a realistic pen width.
+It also crams a word in near the margin instead of wrapping when the word *almost* fits, leaves a ragged right edge, and now and then makes a typo that gets scribbled out and rewritten.
+
+## The pen
+
+Ink is modelled as coverage × density with Beer–Lambert absorption, so overlapping strokes and blobs get darker and more saturated, like real dye.
+
+| Effect | Based on |
+|---|---|
+| **Burr striations**: fine ink-free streaks running *along* the stroke (line-integral convolution over local stroke direction) | forensic descriptions of ballpoint lines [1][2] |
+| **Gooping**: ink blobs at sharp turns, sitting near the stroke edge | [1][3] |
+| **Inkless starts**: ink fades in on the first letter of a word as the ball primes | [2][4] |
+| **Skips**: short gaps where the ball lost contact | [2] |
+| **Heavier downstrokes**: vertical strokes darker than upstrokes | upstrokes have ~14% less pen pressure [5] |
+| **Pressure**: stroke width *and* darkness drift smoothly as you write | |
+| **Overlap darkening**: double ink where letters touch or cross | |
+| **Paper**: fibre-direction texture, tooth (ink misses the valleys, strongly for pencil), bleed and feathering, edge pooling for wet inks | |
+
+Pens: `ballpoint` (default), `gel`, `fountain` (direction-dependent broad nib + feathering), `pencil`, `marker`.
 
 ## Setup
 
@@ -28,25 +43,28 @@ pip install -r requirements.txt
 
 ```bash
 python -m handwriter "Hey, running late. Back by 6!" -o note.png
-python -m handwriter -f letter.txt -o letter.pdf          # multi-page PDF
-python -m handwriter -f letter.txt -o letter.png          # letter.png, letter_2.png, ...
+python -m handwriter -f letter.txt -o letter.pdf                     # multi-page PDF
+python -m handwriter -f letter.txt -o letter.png --pen fountain --ink black
 echo "hello" | python -m handwriter -o hi.png
 ```
 
-Useful options:
+Options:
 
 ```
 --font Caveat|IndieFlower|NothingYouCouldDo|ReenieBeanie|RockSalt|path/to/font.ttf
---paper lined|blank|grid      --ink blue|black|pencil|red|gel-blue
---messiness 1.0   0 = font-perfect, 1 = normal, 1.5-2 = rushed
---fatigue 0.25    how much worse the bottom of the page gets
---mistakes 0.006  per-word chance of a crossed-out typo (0 to disable)
---slant 4         degrees, positive leans right
---size 2.4        x-height in mm      --line-spacing 7.1  (mm, college ruled)
---weight 0        -0.2 thin .. 0.2 thick
---seed N          same seed = same page
---no-scan         clean digital output (no tilt/lighting/grain)
---dpi 200
+--pen ballpoint|gel|fountain|pencil|marker
+--ink blue|black|pencil|red|gel-blue      --paper lined|blank|grid
+--messiness 1.0     0 = font-perfect, 1 = normal, 1.5 = rushed
+--habits 1.0        strength of the writer's personal quirks
+--pen-defects 1.0   0 = flawless pen, 2 = cheap pen
+--fatigue 0.25      how much worse the bottom of the page gets
+--mistakes 0.006    per-word chance of a crossed-out typo (0 to disable)
+--slant 4           degrees, positive leans right
+--size 2.4          x-height in mm     --line-spacing 7.1 (mm, college ruled)
+--weight 0          -0.2 thin .. 0.2 thick
+--seed N            same seed = same writer and same page
+--no-scan           clean digital output (no tilt/lighting/grain)
+--dpi 300
 --list-fonts
 ```
 
@@ -54,24 +72,29 @@ From Python:
 
 ```python
 from handwriter import generate, Style
-pages = generate("Dear Alex, ...", Style(font="fonts/IndieFlower.ttf", ink="black", messiness=1.3, seed=4))
+pages = generate("Dear Alex, ...", Style(font="fonts/IndieFlower.ttf", pen="gel", ink="black", seed=4))
 pages[0].save("letter.png")
 ```
 
-Every knob is in `handwriter/style.py`.
+Every knob, including the pen physics table, is in `handwriter/style.py`.
 
 ## Most realistic results
 
 1. **Use your own handwriting.** Make a font from your writing (Calligraphr is free), drop the .ttf in `fonts/`, then `--font YourName`.
-2. Keep `messiness` between 0.8 and 1.4. Real people are less chaotic than you'd think.
-3. Use a different `--seed` for each page so pages don't repeat.
+2. Keep `messiness` between 0.8 and 1.3.
+3. The seed sets the writer. Keep the same seed for one "person", and pick a different one for a different person.
 
 ## How it works
 
-- `font.py`: loads glyph outlines with fontTools, flattens the curves, resamples into dense polylines so they can bend, normalises to x-height = 1, and measures stroke width.
-- `layout.py`: word-wraps text and places every character with its own transform plus per-line drift functions. Adds strikethrough scribbles.
-- `render.py`: rasterises at 3× supersampling, varies pressure by thresholding a blurred mask against a noise field, downsamples, and blends ink onto generated paper.
+- `font.py`: loads glyph outlines with fontTools, flattens and resamples them so they can bend, normalises to x-height = 1, measures stroke width, and finds i/j dots.
+- `layout.py`: the writer. Holds habits and allographs, per-line drift and per-letter noise, word wrap with margin cramming and typos, and records pen events (blobs, skips, faint starts).
+- `render.py`: the pen and paper. Supersampled rasterisation, pressure-driven stroke width, structure-tensor stroke orientation, striations via LIC, Beer–Lambert ink, paper fibres and tooth, scan simulation.
 
-## Examples
+## References
 
-See `examples/`.
+1. Ball pen stroke characteristics (gooping after curves, direction changes): *Ball Pens and Inks*, core.ac.uk/download/231003512.pdf
+2. Characteristics of commonly used pens (inkless start, gooping, skipping, burr striations): aditya.ac.in forensic QD project
+3. AAFS 2007 J2: ball housing defects and line defects
+4. Variations in line quality of handwritten strokes, *Arab J. Forensic Sci. & Forensic Med.* (2022): ballpoint priming leaves un-inked starts
+5. Caligiuri & Mohammed, kinematic analyses of stroke direction: upstrokes 19% longer, 15% faster, 14% lower pressure
+6. Snape (1980), direction of ballpoint motion from burr striations in curved strokes

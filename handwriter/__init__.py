@@ -1,4 +1,4 @@
 from .render import generate
-from .style import INKS, Style
+from .style import INKS, PENS, Pen, Style
 
-__all__ = ["generate", "Style", "INKS"]
+__all__ = ["generate", "Style", "Pen", "INKS", "PENS"]

@@ -54,6 +54,17 @@ def _resample(c: np.ndarray, step: float) -> np.ndarray:
     return np.column_stack([np.interp(s, cum, closed[:, 0]), np.interp(s, cum, closed[:, 1])])
 
 
+class GlyphShape:
+    __slots__ = ("contours", "advance", "is_dot")
+
+    def __init__(self, contours, advance, is_dot):
+        self.contours = contours
+        self.advance = advance
+        # tittles / accents: small marks above the x-height that a writer adds in a separate,
+        # habitually displaced pen motion (forensic examiners treat i-dot placement as a personal habit)
+        self.is_dot = is_dot
+
+
 class HandFont:
     """Glyph outlines normalised so that x-height == 1, baseline at y=0, y pointing down."""
 
@@ -63,11 +74,11 @@ class HandFont:
         self.gs = self.tt.getGlyphSet()
         self.cmap = self.tt.getBestCmap()
         self.hmtx = self.tt["hmtx"]
-        self._cache: dict[str, tuple[list[np.ndarray], float]] = {}
+        self._cache: dict[str, GlyphShape] = {}
 
         upm = self.tt["head"].unitsPerEm
         xh = None
-        if "x" in [chr(c) for c in self.cmap if c < 0x110000]:
+        if self.has("x"):
             raw = self._raw("x")[0]
             if raw:
                 ys = np.concatenate([c[:, 1] for c in raw])
@@ -75,7 +86,7 @@ class HandFont:
         self.xheight = xh if xh and xh > 0 else 0.5 * upm
 
         self.stroke = self._stroke_width()
-        self.space = max(self.glyph(" ")[1] if ord(" ") in self.cmap else 0.5, 0.55)
+        self.space = max(self.glyph(" ").advance if self.has(" ") else 0.5, 0.55)
 
     def _stroke_width(self) -> float:
         """Average stroke thickness (in x-heights) estimated as 2*area/perimeter over a few letters."""
@@ -83,7 +94,7 @@ class HandFont:
         for ch in "nomulie":
             if not self.has(ch):
                 continue
-            cs = self.glyph(ch)[0]
+            cs = self.glyph(ch).contours
             if not cs:
                 continue
             area = abs(sum(0.5 * np.sum(c[:, 0] * np.roll(c[:, 1], -1) - np.roll(c[:, 0], -1) * c[:, 1]) for c in cs))
@@ -103,7 +114,7 @@ class HandFont:
     def has(self, ch: str) -> bool:
         return ord(ch) in self.cmap
 
-    def glyph(self, ch: str) -> tuple[list[np.ndarray], float]:
+    def glyph(self, ch: str) -> GlyphShape:
         if ch in self._cache:
             return self._cache[ch]
         contours, adv = self._raw(ch)
@@ -115,6 +126,10 @@ class HandFont:
             c = c * k
             c[:, 1] *= -1  # y down
             out.append(_resample(c, 0.03))
-        res = (out, adv * k)
+        is_dot = []
+        for c in out:
+            w, h = c.max(0) - c.min(0)
+            is_dot.append(bool(len(out) > 1 and c[:, 1].max() < -0.98 and w < 0.45 and h < 0.45))
+        res = GlyphShape(out, adv * k, is_dot)
         self._cache[ch] = res
         return res
