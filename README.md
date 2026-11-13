@@ -1,5 +1,7 @@
 # handwriter
 
+![sample](examples/thank_you_card.png)
+
 Turns text into handwriting that looks like a real person wrote it with a real pen, not like a font.
 
 Handwriting fonts look fake because every "a" is identical, every line is perfectly straight, and the ink is a flat, perfect fill. handwriter uses a font only as a skeleton. It writes as one consistent but imperfect **writer**, using a physically modelled **pen**.
@@ -64,7 +66,7 @@ Plotter options:
 --no-home               skip G28
 ```
 
-Writing size matters for plotting. The default 2.4 mm x-height suits a 0.5 mm pen; use `--size 3` or more with thicker pens.
+Writing size matters for plotting. The default 3 mm x-height suits a 0.5-0.7 mm pen.
 
 ## Setup
 
@@ -86,16 +88,17 @@ Options:
 ```
 --font Caveat|IndieFlower|NothingYouCouldDo|ReenieBeanie|RockSalt|path/to/font.ttf
 --pen ballpoint|gel|fountain|pencil|marker
---ink blue|black|pencil|red|gel-blue      --paper lined|blank|grid
+--ink blue|black|pencil|red|gel-blue      --paper blank|lined|grid   [blank]
 --messiness 1.0     0 = font-perfect, 1 = normal, 1.5 = rushed
 --habits 1.0        strength of the writer's personal quirks
 --pen-defects 1.0   0 = flawless pen, 2 = cheap pen
 --fatigue 0.25      how much worse the bottom of the page gets
 --mistakes 0        per-word chance of a crossed-out typo (off by default)
 --slant 4           degrees, positive leans right
---size 2.4          x-height in mm     --line-spacing 7.1 (mm, college ruled)
+--size 3            x-height in mm     --line-spacing 8.5 (mm; 7.1 for college ruled)
 --weight 0          -0.2 thin .. 0.2 thick
---seed N            same seed = same writer and same page
+--writer 42         who is writing (habits + letter shapes). 42 is the default hand
+--seed N            per-note randomness; same seed + text = identical output
 --page letter|a4|a5|a6|index|postcard|WxH   (mm)
 --no-scan           clean digital output (no tilt/lighting/grain)
 --dpi 300
@@ -116,7 +119,7 @@ Every knob, including the pen physics table, is in `handwriter/style.py`.
 
 1. **Use your own handwriting.** Make a font from your writing (Calligraphr is free), drop the .ttf in `fonts/`, then `--font YourName`.
 2. Keep `messiness` between 0.8 and 1.3.
-3. The seed sets the writer. Keep the same seed for one "person", and pick a different one for a different person.
+3. `--writer` sets the person. Every note from writer 42 (the default) is in the same hand but never identical. Use another number for a different person.
 
 ## How it works
 

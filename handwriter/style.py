@@ -56,18 +56,19 @@ PENS = {
 @dataclass
 class Style:
     font: str = "fonts/Caveat.ttf"
-    seed: int | None = None
+    seed: int | None = None  # per-note randomness (None = different every time)
+    writer_seed: int | None = 42  # who is writing: habits & letter shapes. 42 = the default hand
 
     # page
     dpi: int = 300
     page_inches: tuple[float, float] = (8.5, 11.0)
-    paper: str = "lined"  # lined | blank | grid
+    paper: str = "blank"  # lined | blank | grid
     margins_in: tuple[float, float, float, float] = (1.25, 0.6, 1.0, 0.7)  # left, right, top, bottom
     scan: bool = True  # slight page tilt, uneven lighting, grain
 
     # writing size
-    x_height_mm: float = 2.4
-    line_spacing_mm: float = 7.1  # college ruled
+    x_height_mm: float = 3.0
+    line_spacing_mm: float = 8.5
     tracking: float = 0.96  # letter spacing multiplier (people write tighter than fonts)
     word_spacing: float = 1.35
     slant_deg: float = 4.0  # positive = leans right

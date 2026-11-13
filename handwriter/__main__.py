@@ -41,9 +41,10 @@ def main(argv=None):
     p.add_argument("-f", "--file", help="read text from a file")
     p.add_argument("-o", "--out", help="output .png (one file per page) or .pdf  [default out.png unless --gcode]")
     p.add_argument("--font", default="Caveat", help="font name in fonts/ or path to a .ttf/.otf")
-    p.add_argument("--seed", type=int, help="random seed (same seed = same writer and page)")
+    p.add_argument("--seed", type=int, help="per-note randomness; same seed + text = identical output")
+    p.add_argument("--writer", type=int, default=42, help="writer id: habits & letter shapes [42 = default hand]")
     p.add_argument("--page", type=_page_size, default="letter", help="letter|a4|a5|a6|index|postcard or WxH mm")
-    p.add_argument("--paper", choices=["lined", "blank", "grid"], default="lined")
+    p.add_argument("--paper", choices=["lined", "blank", "grid"], default="blank")
     p.add_argument("--ink", choices=list(INKS), default="blue")
     p.add_argument("--pen", choices=list(PENS), default="ballpoint", help="instrument physics")
     p.add_argument("--pen-defects", type=float, default=1.0, help="0 = flawless pen, 1 = normal, 2 = cheap pen")
@@ -52,8 +53,8 @@ def main(argv=None):
     p.add_argument("--fatigue", type=float, default=0.25, help="how much worse it gets down the page")
     p.add_argument("--mistakes", type=float, default=0.0, help="chance per word of a crossed-out typo (off by default)")
     p.add_argument("--slant", type=float, default=4.0, help="degrees, positive leans right")
-    p.add_argument("--size", type=float, default=2.4, help="x-height in mm")
-    p.add_argument("--line-spacing", type=float, default=7.1, help="mm between lines")
+    p.add_argument("--size", type=float, default=3.0, help="x-height in mm")
+    p.add_argument("--line-spacing", type=float, default=8.5, help="mm between lines")
     p.add_argument("--margin", type=float, help="left margin in mm (default scales with page)")
     p.add_argument("--weight", type=float, default=0.0, help="-0.2 thin .. 0.2 thick")
     p.add_argument("--dpi", type=int, default=300)
@@ -102,7 +103,7 @@ def main(argv=None):
     margins = (left, 0.6 * k, 1.0 * min(1.0, ph / 279.4), 0.7 * min(1.0, ph / 279.4))
 
     st = Style(
-        font=font, seed=a.seed, paper=a.paper, ink=a.ink, messiness=a.messiness, fatigue=a.fatigue,
+        font=font, seed=a.seed, writer_seed=a.writer, paper=a.paper, ink=a.ink, messiness=a.messiness, fatigue=a.fatigue,
         mistakes=a.mistakes, slant_deg=a.slant, x_height_mm=a.size, line_spacing_mm=a.line_spacing,
         weight=a.weight, dpi=a.dpi, pen=a.pen, pen_defects=a.pen_defects, habits=a.habits, scan=not a.no_scan,
         page_inches=(pw / 25.4, ph / 25.4), margins_in=margins,

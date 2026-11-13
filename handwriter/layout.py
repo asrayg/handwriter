@@ -188,7 +188,11 @@ class Writer:
         self.sw = max(pen_px, self.font.stroke * self.xh)
 
         # ---- writer habits: drawn once, consistent across the whole document
-        h, r = style.habits, np.random.default_rng(self.rng.integers(1 << 31))
+        h = style.habits
+        hseed = self.rng.integers(1 << 31)  # always drawn so seeds stay reproducible
+        if style.writer_seed is not None:
+            hseed = np.random.default_rng(style.writer_seed).integers(1 << 31)
+        r = np.random.default_rng(hseed)
         self._habit_rng = r
         self.hab = dict(
             dot_dx=r.uniform(0.0, 0.28) * h,  # most people dot i's a touch to the right
