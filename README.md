@@ -46,22 +46,46 @@ python -m handwriter -f note.txt --page a5 --gcode note.gcode --bambu-template c
 
 A pen draws lines, not filled shapes, so each letter is thinned to its centreline and traced into pen strokes. All the writer's variation is kept, and the real pen supplies the ink texture. Strokes are ordered to cut pen-up travel, and the page is centred on the bed.
 
-### Bambu P1P setup
-1. **Holder:** print a pen holder that clips to the toolhead. A spring-loaded one is very forgiving. The nozzle stays **cold**; the G-code turns all heaters and fans off.
-2. **Template (once):** Bambu printers only accept `.gcode.3mf`. In Bambu Studio, slice any tiny model for the P1P, then *File → Export → Export plate sliced file* to get e.g. `cube.gcode.3mf`. handwriter copies it and swaps in its own G-code and checksum. Send the result via SD card or Bambu Studio. (If the printer rejects it, re-export the template in the current Studio version.)
-3. **Homing:** the P1P homes Z by touching the *nozzle* to the bed centre. Keep the pen tip **above** the nozzle tip during homing (or use a spring-loaded holder), otherwise the pen hits the bed first. `--no-home` skips G28 if the printer is already homed.
-4. **Calibrate Z:** after homing, jog Z down until the pen just touches the paper and note the Z value, then pass `--pen-down-z <that>`. Pen-up defaults to pen-down + 3 mm.
-5. **Paper:** tape it to the plate, centred (or set `--offset XxY` for the page's bottom-left corner).
+### Bambu P1P: printable fixtures (ready to print)
+
+`fixtures/` contains STLs **and** P1P-ready sliced files (0.4 nozzle, 0.20 mm, PLA):
+
+| File | What |
+|---|---|
+| `postcard_frame.p1p.gcode.3mf` | 1.2 mm frame with a postcard pocket, ~15 min. **Print it and leave it on the plate.** It's printed at the plate centre, which is exactly where the pen G-code centres the card. Corner tabs hold the card down; the arrow points to the back = top edge of the card. |
+| `pen_holder_and_collar.p1p.gcode.3mf` | Gravity-fed pen sleeve + C-clip collar. |
+
+Regenerate for your pen with `python -m handwriter.fixtures --pen-diameter 9.2 --slice` (needs Bambu Studio installed).
+
+**How the pen holder works:** the pen slides freely in the sleeve, and the collar clipped on the pen stops it falling through. On pen-down the head goes ~1 mm *past* contact, so the pen floats up and writes with its own weight; loop a rubber band from the collar ears to the hooks for more pressure. This is forgiving of Z errors and harmless during homing. Stick the plate to the **front cover** of the toolhead with VHB / double-sided tape (zip-tie slots as backup), with the pen tip hanging a few mm below the nozzle.
+
+> The holder is a generic design (I didn't have exact P1P toolhead dimensions). If it doesn't sit well, a proven P1P mount like [MakerWorld 1382919](https://makerworld.com/en/models/1382919) works the same way; just set `--pen-offset` for it.
+
+### Plotting a postcard
+```bash
+python -m handwriter -f note.txt --page postcard --gcode plot/note.gcode --pen-down-z <Z> --pen-offset <dx,dy>
+#  -> plot/note.gcode.3mf  (send to the printer: SD card or Bambu Studio "Print")
+```
+The `.gcode.3mf` wrapper comes from a built-in P1P template, so no Bambu Studio export is needed, and the printer screen shows a preview of the handwriting.
+
+### Calibration (once)
+1. **Pen offset:** put the pen tip where it touches paper, measure how far it sits from the nozzle (mm; pen in front of the nozzle means negative Y), e.g. `--pen-offset 0,-31`.
+2. **Pen-down Z:** home, then jog Z until the pen tip just touches a card in the frame. Use that Z **minus ~1 mm** (over-travel) as `--pen-down-z`.
+3. Plot `python -m handwriter --calibration --page postcard --gcode plot/cal.gcode --pen-down-z <Z> --pen-offset <dx,dy>`. It draws a centre cross, a square and L-marks 5 mm inside each card corner. If everything is shifted, change `--pen-offset` by that amount.
+
+Notes: the P1P homes Z by touching the nozzle to the plate, and the floating pen just gets pushed up, which is fine. P1/X1 G-code is centred on (128, 126) because of the printer profile's 2 mm Y extruder offset, so the frame and the pen agree.
 
 Plotter options:
 
 ```
 --gcode FILE            write G-code (+ preview); one file per page
 --printer p1p           p1p | p1s | x1c | a1 | ender3
---bambu-template F      plate-sliced .gcode.3mf from Bambu Studio -> also writes FILE.gcode.3mf
+--bambu-template F      wrap in your own plate-sliced .gcode.3mf instead of the built-in one
+--pen-offset dx,dy      pen tip relative to nozzle in mm
+--calibration           plot alignment marks instead of text
 --page a5               must fit the bed (P1P 256x256: a5, a6, postcard, index, 250x250...; letter/A4 are too tall)
 --pen-down-z Z          pen touching the paper (calibrate!)   --pen-up-z Z   travel height
---offset XxY            page bottom-left on the bed [centred]  --bed WxH   override bed size
+--offset XxY            page bottom-left on the bed [centred on plate]  --bed WxH   override bed size
 --draw-speed 3000       mm/min while drawing                   --travel-speed 12000
 --no-home               skip G28
 ```

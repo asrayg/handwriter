@@ -1,0 +1,62 @@
+; HEADER_BLOCK_START
+; BambuStudio 02.07.01.62
+; model printing time: 0m 8s; total estimated time: 0m 8s
+; total layer number: 1
+; total filament weight [g] : 0.00
+; max_z_height: 13.00
+; HEADER_BLOCK_END
+
+; handwriter pen-plot G-code for Bambu Lab P1P
+; page 152.4 x 101.6 mm, bottom-left at bed (51.8, 75.2)
+; pen down Z=0.0  pen up Z=3.0  pen offset=(0.0, 0.0)
+; drawing 0.16 m, 7 pen lifts, est. 0 min
+G21 ; mm
+G90 ; absolute
+M104 S0 ; hotend off (cold nozzle, pen does the work)
+M140 S0 ; bed off
+M106 S0 ; part fan off
+M106 P2 S0 ; aux fan off
+M106 P3 S0 ; chamber fan off
+M17 ; motors on
+G28 ; home all axes
+G0 Z8.00 F1200
+G0 Z3.00 F1200
+G0 X66.800 Y80.200 F12000
+G1 Z0.00 F1200
+G1 X56.800 Y80.200 F3000
+G1 X56.800 Y90.200 F3000
+G0 Z3.00 F1200
+G0 X118.000 Y126.000 F12000
+G1 Z0.00 F1200
+G1 X138.000 Y126.000 F3000
+G0 Z3.00 F1200
+G0 X143.000 Y131.000 F12000
+G1 Z0.00 F1200
+G1 X153.000 Y131.000 F3000
+G1 X153.000 Y121.000 F3000
+G1 X143.000 Y121.000 F3000
+G1 X143.000 Y131.000 F3000
+G0 Z3.00 F1200
+G0 X128.000 Y136.000 F12000
+G1 Z0.00 F1200
+G1 X128.000 Y116.000 F3000
+G0 Z3.00 F1200
+G0 X189.200 Y80.200 F12000
+G1 Z0.00 F1200
+G1 X199.200 Y80.200 F3000
+G1 X199.200 Y90.200 F3000
+G0 Z3.00 F1200
+G0 X199.200 Y161.800 F12000
+G1 Z0.00 F1200
+G1 X199.200 Y171.800 F3000
+G1 X189.200 Y171.800 F3000
+G0 Z3.00 F1200
+G0 X66.800 Y171.800 F12000
+G1 Z0.00 F1200
+G1 X56.800 Y171.800 F3000
+G1 X56.800 Y161.800 F3000
+G0 Z13.00 F1200
+M400
+G0 X128 Y250 F12000 ; park at the back, page free
+M400
+M18 ; motors off

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import INKS, PENS, Style
-from .gcode import PRINTERS, page_paths, preview, printer, to_gcode, write_bambu_3mf
+from .gcode import PRINTERS, calibration_paths, page_paths, preview, printer, to_gcode, write_bambu_3mf
 from .layout import Writer
 from .render import compose
 
@@ -33,6 +33,14 @@ def _page_size(s: str) -> tuple[float, float]:
     if not m:
         raise argparse.ArgumentTypeError(f"page must be one of {', '.join(PAGES_MM)} or WxH in mm, e.g. 200x200")
     return float(m.group(1)), float(m.group(2))
+
+
+def _xy(s: str) -> tuple[float, float]:
+    try:
+        x, y = (float(v) for v in s.replace("x", ",").split(","))
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected 'dx,dy' in mm, e.g. 0,-32")
+    return x, y
 
 
 def main(argv=None):
@@ -64,10 +72,13 @@ def main(argv=None):
     g = p.add_argument_group("pen plotter / G-code (Bambu Lab P1P, Ender 3, ...)")
     g.add_argument("--gcode", help="write pen-plotter G-code to this file (+ a _preview.png)")
     g.add_argument("--printer", choices=list(PRINTERS), default="p1p", help="printer profile [p1p]")
-    g.add_argument("--bambu-template", help="a plate-sliced .gcode.3mf exported from Bambu Studio; we inject our "
-                                            "G-code into a copy so the printer accepts it")
+    g.add_argument("--bambu-template", help="plate-sliced .gcode.3mf to wrap the G-code in [built-in P1P template]")
+    g.add_argument("--pen-offset", type=_xy, default=(0.0, 0.0),
+                   help="pen tip position relative to the nozzle 'dx,dy' mm (pen in front = negative dy)")
+    g.add_argument("--calibration", action="store_true",
+                   help="ignore the text; plot a crosshair + corner marks to check alignment and pen offset")
     g.add_argument("--bed", type=_page_size, help="override printable bed size WxH mm")
-    g.add_argument("--offset", type=_page_size, help="page bottom-left corner on the bed, XxY mm [centred]")
+    g.add_argument("--offset", type=_page_size, help="page bottom-left corner on the bed, XxY mm [centred on plate]")
     g.add_argument("--pen-down-z", type=float, help="Z where the pen touches the paper - calibrate! [0]")
     g.add_argument("--pen-up-z", type=float, help="Z for travel moves [pen-down + 3]")
     g.add_argument("--draw-speed", type=float, help="mm/min while drawing")
@@ -83,6 +94,8 @@ def main(argv=None):
         return
 
     text = a.text
+    if a.calibration:
+        text = text or " "
     if a.file:
         text = Path(a.file).read_text()
     elif text is None and not sys.stdin.isatty():
@@ -118,15 +131,18 @@ def main(argv=None):
                   file=sys.stderr)
         base = PRINTERS[a.printer]
         bx, by = a.bed or (base.bed_x, base.bed_y)
-        ox, oy = a.offset or ((bx - pw) / 2, (by - ph) / 2)  # centre the page on the bed by default
+        cx, cy = (base.center_x or bx / 2), (base.center_y or by / 2)
+        ox, oy = a.offset or (cx - pw / 2, cy - ph / 2)  # centre the page on the plate by default
         pl = printer(a.printer, bed_x=bx, bed_y=by, offset_x=round(ox, 2), offset_y=round(oy, 2),
                      pen_down_z=a.pen_down_z,
                      pen_up_z=a.pen_up_z if a.pen_up_z is not None else a.pen_down_z + 3,
-                     draw_speed=a.draw_speed, travel_speed=a.travel_speed, home=not a.no_home)
+                     draw_speed=a.draw_speed, travel_speed=a.travel_speed, home=not a.no_home,
+                     pen_dx=a.pen_offset[0], pen_dy=a.pen_offset[1])
         gpath = Path(a.gcode)
         for i, pg in enumerate(pages):
             try:
-                code, bed_paths = to_gcode(page_paths(pg, st.dpi), pw, ph, pl)
+                paths = calibration_paths(pw, ph) if a.calibration else page_paths(pg, st.dpi)
+                code, bed_paths = to_gcode(paths, pw, ph, pl)
             except ValueError as e:
                 p.error(str(e))
             suffix = "" if i == 0 else f"_{i + 1}"
@@ -134,18 +150,18 @@ def main(argv=None):
             out = gpath.with_name(f"{stem}{suffix}.gcode")
             out.write_text(code)
             prev = out.with_name(f"{stem}{suffix}_preview.png")
-            preview(bed_paths, pw, ph, pl).save(prev)
-            print(out, "|", code.splitlines()[3].lstrip("; "))
+            pim = preview(bed_paths, pw, ph, pl)
+            pim.save(prev)
+            print(out, "|", next(l for l in code.splitlines() if l.startswith("; drawing")).lstrip("; "))
             if pl.flavor == "bambu":
-                if a.bambu_template:
-                    out3 = out.with_name(f"{stem}{suffix}.gcode.3mf")
-                    write_bambu_3mf(code, a.bambu_template, str(out3))
-                    print(out3, "| send this to the printer")
-                elif i == 0:
-                    print("note: Bambu printers need a .gcode.3mf - pass --bambu-template (see README)")
+                out3 = out.with_name(f"{stem}{suffix}.gcode.3mf")
+                write_bambu_3mf(code, a.bambu_template, str(out3), thumb=pim)
+                print(out3, "| send this one to the printer")
             print(prev)
+            if a.calibration:
+                break
 
-    if a.out or not a.gcode:
+    if (a.out or not a.gcode) and not a.calibration:
         images = [compose(pg, writer, writer.rng) for pg in pages]
         out = Path(a.out or "out.png")
         if out.suffix.lower() == ".pdf":

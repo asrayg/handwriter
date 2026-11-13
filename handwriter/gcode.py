@@ -33,18 +33,27 @@ class Plotter:
     z_speed: float = 300.0  # Ender 3 Z axis is slow (~5 mm/s)
     home: bool = True
     flavor: str = "marlin"  # marlin | bambu
+    # G-code point that is the physical plate centre. Bambu's P1/X1 profiles carry extruder_offset 0x2,
+    # so a model centred on the plate is printed around G-code (128, 126): we centre pages there too,
+    # which makes the printed postcard frame and the pen G-code line up exactly.
+    center_x: float = 0.0
+    center_y: float = 0.0
+    # where the pen tip is relative to the nozzle (mm). Pen in front of the nozzle = negative Y.
+    pen_dx: float = 0.0
+    pen_dy: float = 0.0
 
 
 PRINTERS = {
     "p1p": Plotter(name="Bambu Lab P1P", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
-                   flavor="bambu"),
+                   flavor="bambu", center_x=128, center_y=126),
     "p1s": Plotter(name="Bambu Lab P1S", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
-                   flavor="bambu"),
+                   flavor="bambu", center_x=128, center_y=126),
     "x1c": Plotter(name="Bambu Lab X1C", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
-                   flavor="bambu"),
+                   flavor="bambu", center_x=128, center_y=126),
     "a1": Plotter(name="Bambu Lab A1", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
-                  flavor="bambu"),
-    "ender3": Plotter(name="Creality Ender 3", bed_x=220, bed_y=220, draw_speed=1500, travel_speed=4000, z_speed=300),
+                  flavor="bambu", center_x=128, center_y=128),
+    "ender3": Plotter(name="Creality Ender 3", bed_x=220, bed_y=220, draw_speed=1500, travel_speed=4000, z_speed=300,
+                      center_x=110, center_y=110),
 }
 
 
@@ -188,19 +197,26 @@ def _order(paths: list[np.ndarray]) -> list[np.ndarray]:
 
 def to_gcode(paths_mm: list[np.ndarray], page_w_mm: float, page_h_mm: float, pl: Plotter) -> tuple[str, list]:
     """Return G-code text and the ordered paths in bed coordinates (for previews)."""
-    if page_w_mm + pl.offset_x > pl.bed_x + 1e-6 or page_h_mm + pl.offset_y > pl.bed_y + 1e-6:
+    if page_w_mm + pl.offset_x > pl.bed_x + 1e-6 or page_h_mm + pl.offset_y > pl.bed_y + 1e-6 or min(
+            pl.offset_x, pl.offset_y) < 0:
         raise ValueError(
             f"page {page_w_mm:.0f}x{page_h_mm:.0f} mm at offset ({pl.offset_x},{pl.offset_y}) does not fit the "
             f"{pl.bed_x:.0f}x{pl.bed_y:.0f} mm bed - use a smaller --page (e.g. a5, or 200x200)"
         )
     bed = [np.column_stack([p[:, 0] + pl.offset_x, (page_h_mm - p[:, 1]) + pl.offset_y]) for p in paths_mm]
-    bed = _order(bed)
+    bed = _order(bed)  # pen-tip positions; the nozzle is commanded to pen - (pen_dx, pen_dy)
+    nozzle = np.concatenate(bed) - [pl.pen_dx, pl.pen_dy] if bed else np.zeros((1, 2))
+    if nozzle.min() < 0 or nozzle[:, 0].max() > pl.bed_x or nozzle[:, 1].max() > pl.bed_y:
+        raise ValueError(f"with pen offset ({pl.pen_dx}, {pl.pen_dy}) the nozzle would leave the bed "
+                         f"(X {nozzle[:, 0].min():.0f}..{nozzle[:, 0].max():.0f}, "
+                         f"Y {nozzle[:, 1].min():.0f}..{nozzle[:, 1].max():.0f})")
+    ox, oy = pl.pen_dx, pl.pen_dy
 
     up, down = f"G0 Z{pl.pen_up_z:.2f} F{pl.z_speed:.0f}", f"G1 Z{pl.pen_down_z:.2f} F{pl.z_speed:.0f}"
     g = [
         f"; handwriter pen-plot G-code for {pl.name}",
         f"; page {page_w_mm:.1f} x {page_h_mm:.1f} mm, bottom-left at bed ({pl.offset_x}, {pl.offset_y})",
-        f"; pen down Z={pl.pen_down_z}  pen up Z={pl.pen_up_z}  strokes={len(bed)}",
+        f"; pen down Z={pl.pen_down_z}  pen up Z={pl.pen_up_z}  pen offset=({pl.pen_dx}, {pl.pen_dy})",
         "G21 ; mm",
         "G90 ; absolute",
         "M104 S0 ; hotend off (cold nozzle, pen does the work)",
@@ -228,11 +244,11 @@ def to_gcode(paths_mm: list[np.ndarray], page_w_mm: float, page_h_mm: float, pl:
             if last is not None:
                 travel_len += float(np.linalg.norm(p[0] - last))
             lifts += 1
-            g.append(f"G0 X{p[0, 0]:.3f} Y{p[0, 1]:.3f} F{pl.travel_speed:.0f}")
+            g.append(f"G0 X{p[0, 0] - ox:.3f} Y{p[0, 1] - oy:.3f} F{pl.travel_speed:.0f}")
             g.append(down)
             pen_is_down = True
         for q in p[1:]:
-            g.append(f"G1 X{q[0]:.3f} Y{q[1]:.3f} F{pl.draw_speed:.0f}")
+            g.append(f"G1 X{q[0] - ox:.3f} Y{q[1] - oy:.3f} F{pl.draw_speed:.0f}")
         if len(p) > 1:
             draw_len += float(np.linalg.norm(np.diff(p, axis=0), axis=1).sum())
         last = p[-1]
@@ -246,7 +262,25 @@ def to_gcode(paths_mm: list[np.ndarray], page_w_mm: float, page_h_mm: float, pl:
     minutes = (draw_len / pl.draw_speed + travel_len / pl.travel_speed
                + lifts * 2 * abs(pl.pen_up_z - pl.pen_down_z) / pl.z_speed) * 1.15  # + accel overhead
     g.insert(3, f"; drawing {draw_len / 1000:.2f} m, {lifts} pen lifts, est. {minutes:.0f} min")
+    if pl.flavor == "bambu":  # the printer reads this block for its time estimate / progress
+        m, sec = divmod(int(minutes * 60), 60)
+        g = ["; HEADER_BLOCK_START", "; BambuStudio 02.07.01.62", f"; model printing time: {m}m {sec}s; "
+             f"total estimated time: {m}m {sec}s", "; total layer number: 1", "; total filament weight [g] : 0.00",
+             f"; max_z_height: {pl.pen_up_z + 10:.2f}", "; HEADER_BLOCK_END", ""] + g
     return "\n".join(g) + "\n", bed
+
+
+def calibration_paths(page_w_mm: float, page_h_mm: float) -> list[np.ndarray]:
+    """Crosshair at the page centre, L-marks 5 mm inside each corner, and a 10 mm square near the
+    centre. Plot it on a card in the frame: if the marks are shifted, adjust --pen-offset."""
+    cx, cy = page_w_mm / 2, page_h_mm / 2
+    paths = [np.array([[cx - 10, cy], [cx + 10, cy]]), np.array([[cx, cy - 10], [cx, cy + 10]]),
+             np.array([[cx + 15, cy - 5], [cx + 25, cy - 5], [cx + 25, cy + 5], [cx + 15, cy + 5], [cx + 15, cy - 5]])]
+    m, L = 5.0, 10.0
+    for (x, y, sx, sy) in ((m, m, 1, 1), (page_w_mm - m, m, -1, 1), (m, page_h_mm - m, 1, -1),
+                           (page_w_mm - m, page_h_mm - m, -1, -1)):
+        paths.append(np.array([[x + sx * L, y], [x, y], [x, y + sy * L]]))
+    return paths
 
 
 def preview(bed_paths: list, page_w_mm: float, page_h_mm: float, pl: Plotter, px_per_mm: float = 6) -> Image.Image:
@@ -263,15 +297,32 @@ def preview(bed_paths: list, page_w_mm: float, page_h_mm: float, pl: Plotter, px
     return im
 
 
-def write_bambu_3mf(code: str, template: str, out: str) -> None:
+DEFAULT_BAMBU_TEMPLATE = __import__("pathlib").Path(__file__).parent / "data" / "p1p_template.gcode.3mf"
+
+
+def write_bambu_3mf(code: str, template: str | None, out: str, thumb: Image.Image | None = None) -> None:
     """Inject G-code into a plate-sliced .gcode.3mf exported from Bambu Studio.
 
     Bambu printers only accept .gcode.3mf. The most reliable way to get the container right is to
     export any tiny model once (File > Export > Export plate sliced file) and reuse it as a template:
     every entry is copied, and Metadata/plate_1.gcode and its .md5 are replaced with ours.
     """
+    import io
+
+    template = template or str(DEFAULT_BAMBU_TEMPLATE)
     data = code.encode()
     md5 = hashlib.md5(data).hexdigest().upper()
+    thumbs = {}
+    if thumb is not None:  # show the handwriting on the printer screen instead of the template's model
+        for n, size in (("Metadata/plate_1.png", 512), ("Metadata/plate_1_small.png", 128),
+                        ("Metadata/plate_no_light_1.png", 512)):
+            t = thumb.copy()
+            t.thumbnail((size, size))
+            canvas = Image.new("RGB", (size, size), (40, 40, 40))
+            canvas.paste(t, ((size - t.width) // 2, (size - t.height) // 2))
+            buf = io.BytesIO()
+            canvas.save(buf, "PNG")
+            thumbs[n] = buf.getvalue()
     with zipfile.ZipFile(template) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
         names = zin.namelist()
         gname = next((n for n in names if n.startswith("Metadata/plate_") and n.endswith(".gcode")), None)
@@ -282,6 +333,8 @@ def write_bambu_3mf(code: str, template: str, out: str) -> None:
                 zout.writestr(n, data)
             elif n == gname + ".md5":
                 zout.writestr(n, md5)
+            elif n in thumbs:
+                zout.writestr(n, thumbs[n])
             else:
                 zout.writestr(zin.getinfo(n), zin.read(n))
         if gname + ".md5" not in names:

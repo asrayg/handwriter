@@ -2,4 +2,5 @@ numpy>=1.24
 Pillow>=10
 scipy>=1.10
 scikit-image>=0.20
+manifold3d>=2.4   # only for handwriter.fixtures
 fonttools>=4.25
