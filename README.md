@@ -35,31 +35,33 @@ Pens: `ballpoint` (default), `gel`, `fountain` (direction-dependent broad nib + 
 
 ## Pen plotter / 3D printer G-code
 
-Put a pen on your printer and have it actually write the text. Tested output targets Marlin, e.g. a **Creality Ender 3**.
+Put a pen on your 3D printer and have it actually write the text. Default target: **Bambu Lab P1P** (profiles also for P1S, X1C, A1 and Ender 3).
 
 ```bash
-python -m handwriter -f note.txt --page a5 --gcode note.gcode
-#  -> note.gcode + note_preview.png (what the pen will draw)
+python -m handwriter -f note.txt --page a5 --gcode note.gcode --bambu-template cube.gcode.3mf --pen-down-z 1.5
+#  -> note.gcode, note.gcode.3mf (send this one), note_preview.png (what the pen will draw)
 ```
 
-A pen draws lines, not filled shapes, so each letter is thinned to its centreline and traced into pen strokes. All the writer's variation is kept, and the real pen supplies the ink texture. Strokes are ordered to cut pen-up travel.
+A pen draws lines, not filled shapes, so each letter is thinned to its centreline and traced into pen strokes. All the writer's variation is kept, and the real pen supplies the ink texture. Strokes are ordered to cut pen-up travel, and the page is centred on the bed.
 
-Setup on an Ender 3:
-1. Mount a pen in a holder clipped to the hotend carriage (many printable ones exist; search "Ender 3 pen holder"). Keep the hotend **cold**. The G-code turns heaters off.
-2. Tape the paper to the bed with its bottom-left corner at the bed origin (front-left), or set `--offset XxY`.
-3. Find the Z where the pen just touches the paper (move Z down from the printer menu after homing). Pass it as `--pen-down-z`, e.g. `--pen-down-z 12.5 --pen-up-z 15.5`. A spring-loaded holder is forgiving here.
-4. Print the .gcode from the SD card like any print.
+### Bambu P1P setup
+1. **Holder:** print a pen holder that clips to the toolhead. A spring-loaded one is very forgiving. The nozzle stays **cold**; the G-code turns all heaters and fans off.
+2. **Template (once):** Bambu printers only accept `.gcode.3mf`. In Bambu Studio, slice any tiny model for the P1P, then *File → Export → Export plate sliced file* to get e.g. `cube.gcode.3mf`. handwriter copies it and swaps in its own G-code and checksum. Send the result via SD card or Bambu Studio. (If the printer rejects it, re-export the template in the current Studio version.)
+3. **Homing:** the P1P homes Z by touching the *nozzle* to the bed centre. Keep the pen tip **above** the nozzle tip during homing (or use a spring-loaded holder), otherwise the pen hits the bed first. `--no-home` skips G28 if the printer is already homed.
+4. **Calibrate Z:** after homing, jog Z down until the pen just touches the paper and note the Z value, then pass `--pen-down-z <that>`. Pen-up defaults to pen-down + 3 mm.
+5. **Paper:** tape it to the plate, centred (or set `--offset XxY` for the page's bottom-left corner).
 
 Plotter options:
 
 ```
---gcode FILE          write G-code (+ FILE_preview.png); one file per page
---page a5             page must fit the bed: a5, a6, postcard, index, or WxH mm (letter/A4 won't fit 220x220)
---bed 220x220         printable area in mm
---offset 0x0          where the page's bottom-left corner sits on the bed (mm)
---pen-down-z 0        Z where the pen touches paper     --pen-up-z 3   Z for travel
---draw-speed 1500     mm/min while drawing              --travel-speed 4000
---no-home             skip G28
+--gcode FILE            write G-code (+ preview); one file per page
+--printer p1p           p1p | p1s | x1c | a1 | ender3
+--bambu-template F      plate-sliced .gcode.3mf from Bambu Studio -> also writes FILE.gcode.3mf
+--page a5               must fit the bed (P1P 256x256: a5, a6, postcard, index, 250x250...; letter/A4 are too tall)
+--pen-down-z Z          pen touching the paper (calibrate!)   --pen-up-z Z   travel height
+--offset XxY            page bottom-left on the bed [centred]  --bed WxH   override bed size
+--draw-speed 3000       mm/min while drawing                   --travel-speed 12000
+--no-home               skip G28
 ```
 
 Writing size matters for plotting. The default 2.4 mm x-height suits a 0.5 mm pen; use `--size 3` or more with thicker pens.

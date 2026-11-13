@@ -7,7 +7,9 @@ is kept; the physical pen supplies the ink texture itself.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import zipfile
+from dataclasses import dataclass, replace
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -19,7 +21,8 @@ from .layout import Glyph, Page, Stroke
 
 @dataclass
 class Plotter:
-    bed_x: float = 220.0  # Ender 3 / 3 V2 / 3 Pro printable area, mm
+    name: str = "ender3"
+    bed_x: float = 220.0  # printable area, mm
     bed_y: float = 220.0
     offset_x: float = 0.0  # where the page's bottom-left corner sits on the bed, mm
     offset_y: float = 0.0
@@ -29,6 +32,24 @@ class Plotter:
     travel_speed: float = 4000.0
     z_speed: float = 300.0  # Ender 3 Z axis is slow (~5 mm/s)
     home: bool = True
+    flavor: str = "marlin"  # marlin | bambu
+
+
+PRINTERS = {
+    "p1p": Plotter(name="Bambu Lab P1P", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
+                   flavor="bambu"),
+    "p1s": Plotter(name="Bambu Lab P1S", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
+                   flavor="bambu"),
+    "x1c": Plotter(name="Bambu Lab X1C", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
+                   flavor="bambu"),
+    "a1": Plotter(name="Bambu Lab A1", bed_x=256, bed_y=256, draw_speed=3000, travel_speed=12000, z_speed=1200,
+                  flavor="bambu"),
+    "ender3": Plotter(name="Creality Ender 3", bed_x=220, bed_y=220, draw_speed=1500, travel_speed=4000, z_speed=300),
+}
+
+
+def printer(key: str, **overrides) -> Plotter:
+    return replace(PRINTERS[key], **{k: v for k, v in overrides.items() if v is not None})
 
 
 _N8 = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]  # 4-neighbours first
@@ -177,17 +198,23 @@ def to_gcode(paths_mm: list[np.ndarray], page_w_mm: float, page_h_mm: float, pl:
 
     up, down = f"G0 Z{pl.pen_up_z:.2f} F{pl.z_speed:.0f}", f"G1 Z{pl.pen_down_z:.2f} F{pl.z_speed:.0f}"
     g = [
-        "; handwriter pen-plot G-code (Marlin / Creality Ender 3)",
+        f"; handwriter pen-plot G-code for {pl.name}",
         f"; page {page_w_mm:.1f} x {page_h_mm:.1f} mm, bottom-left at bed ({pl.offset_x}, {pl.offset_y})",
         f"; pen down Z={pl.pen_down_z}  pen up Z={pl.pen_up_z}  strokes={len(bed)}",
         "G21 ; mm",
         "G90 ; absolute",
-        "M107 ; fan off",
-        "M104 S0 ; hotend off",
+        "M104 S0 ; hotend off (cold nozzle, pen does the work)",
         "M140 S0 ; bed off",
+        "M106 S0 ; part fan off",
     ]
+    if pl.flavor == "bambu":
+        g += ["M106 P2 S0 ; aux fan off", "M106 P3 S0 ; chamber fan off", "M17 ; motors on"]
+        # Bambu homes Z by touching the NOZZLE to the bed centre: the pen tip must sit above
+        # the nozzle tip (or be spring-loaded) while this runs.
     if pl.home:
-        g += [f"G0 Z{pl.pen_up_z + 5:.2f} F{pl.z_speed:.0f}", "G28 ; home all axes"]
+        if pl.flavor != "bambu":  # Bambu firmware handles Z clearance itself during G28
+            g.append(f"G0 Z{pl.pen_up_z + 5:.2f} F{pl.z_speed:.0f}")
+        g.append("G28 ; home all axes")
     g.append(f"G0 Z{pl.pen_up_z + 5:.2f} F{pl.z_speed:.0f}")
 
     pen_is_down = False
@@ -211,8 +238,10 @@ def to_gcode(paths_mm: list[np.ndarray], page_w_mm: float, page_h_mm: float, pl:
         last = p[-1]
     g += [
         f"G0 Z{pl.pen_up_z + 10:.2f} F{pl.z_speed:.0f}",
-        f"G0 X0 Y{pl.bed_y:.0f} F{pl.travel_speed:.0f} ; present the page",
-        "M84 ; motors off",
+        "M400",
+        f"G0 X{pl.bed_x / 2:.0f} Y{pl.bed_y - 6:.0f} F{pl.travel_speed:.0f} ; park at the back, page free",
+        "M400",
+        "M18 ; motors off" if pl.flavor == "bambu" else "M84 ; motors off",
     ]
     minutes = (draw_len / pl.draw_speed + travel_len / pl.travel_speed
                + lifts * 2 * abs(pl.pen_up_z - pl.pen_down_z) / pl.z_speed) * 1.15  # + accel overhead
@@ -232,3 +261,28 @@ def preview(bed_paths: list, page_w_mm: float, page_h_mm: float, pl: Plotter, px
         else:
             d.line(pts, fill=(30, 50, 130), width=max(1, int(0.4 * px_per_mm)), joint="curve")
     return im
+
+
+def write_bambu_3mf(code: str, template: str, out: str) -> None:
+    """Inject G-code into a plate-sliced .gcode.3mf exported from Bambu Studio.
+
+    Bambu printers only accept .gcode.3mf. The most reliable way to get the container right is to
+    export any tiny model once (File > Export > Export plate sliced file) and reuse it as a template:
+    every entry is copied, and Metadata/plate_1.gcode and its .md5 are replaced with ours.
+    """
+    data = code.encode()
+    md5 = hashlib.md5(data).hexdigest().upper()
+    with zipfile.ZipFile(template) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+        names = zin.namelist()
+        gname = next((n for n in names if n.startswith("Metadata/plate_") and n.endswith(".gcode")), None)
+        if gname is None:
+            raise ValueError(f"{template} has no Metadata/plate_N.gcode - export a *plate sliced file* from Bambu Studio")
+        for n in names:
+            if n == gname:
+                zout.writestr(n, data)
+            elif n == gname + ".md5":
+                zout.writestr(n, md5)
+            else:
+                zout.writestr(zin.getinfo(n), zin.read(n))
+        if gname + ".md5" not in names:
+            zout.writestr(gname + ".md5", md5)
