@@ -40,8 +40,8 @@ Pens: `ballpoint` (default), `gel`, `fountain` (direction-dependent broad nib + 
 Put a pen on your 3D printer and have it actually write the text. Default target: **Bambu Lab P1P** (profiles also for P1S, X1C, A1 and Ender 3).
 
 ```bash
-python -m handwriter -f note.txt --page a5 --gcode note.gcode --bambu-template cube.gcode.3mf --pen-down-z 1.5
-#  -> note.gcode, note.gcode.3mf (send this one), note_preview.png (what the pen will draw)
+python -m handwriter -f note.txt --page postcard --gcode note.gcode --pen-down-z 1.5
+#  -> note.gcode, note.gcode.3mf (send this one to the P1P), note_preview.png
 ```
 
 A pen draws lines, not filled shapes, so each letter is thinned to its centreline and traced into pen strokes. All the writer's variation is kept, and the real pen supplies the ink texture. Strokes are ordered to cut pen-up travel, and the page is centred on the bed.
