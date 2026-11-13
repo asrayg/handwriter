@@ -75,7 +75,7 @@ class Style:
     # the human part
     messiness: float = 1.0  # global multiplier for all randomness
     fatigue: float = 0.25  # how much messier the bottom of a page is than the top
-    mistakes: float = 0.006  # per-word chance of a crossed-out misspelling
+    mistakes: float = 0.0  # per-word chance of a crossed-out misspelling (off by default)
     habits: float = 1.0  # strength of the writer's personal, consistent quirks
     tremor: float = 1.0  # tiny hand wobble roughening the stroke edges
 

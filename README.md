@@ -14,7 +14,7 @@ Variation happens in three layers, the same way it does in real handwriting:
 | **Slow drift** (per line) | baseline wander, line tilt, size and slant drift · fatigue: messier toward the bottom of the page |
 | **Instance noise** (per letter) | small warp, scale, rotation, spacing jitter · hand tremor that roughens stroke edges |
 
-It also crams a word in near the margin instead of wrapping when the word *almost* fits, leaves a ragged right edge, and now and then makes a typo that gets scribbled out and rewritten.
+It also crams a word in near the margin instead of wrapping when the word *almost* fits, and leaves a ragged right edge. Crossed-out typos are available but off by default (`--mistakes 0.01`).
 
 ## The pen
 
@@ -32,6 +32,37 @@ Ink is modelled as coverage × density with Beer–Lambert absorption, so overla
 | **Paper**: fibre-direction texture, tooth (ink misses the valleys, strongly for pencil), bleed and feathering, edge pooling for wet inks | |
 
 Pens: `ballpoint` (default), `gel`, `fountain` (direction-dependent broad nib + feathering), `pencil`, `marker`.
+
+## Pen plotter / 3D printer G-code
+
+Put a pen on your printer and have it actually write the text. Tested output targets Marlin, e.g. a **Creality Ender 3**.
+
+```bash
+python -m handwriter -f note.txt --page a5 --gcode note.gcode
+#  -> note.gcode + note_preview.png (what the pen will draw)
+```
+
+A pen draws lines, not filled shapes, so each letter is thinned to its centreline and traced into pen strokes. All the writer's variation is kept, and the real pen supplies the ink texture. Strokes are ordered to cut pen-up travel.
+
+Setup on an Ender 3:
+1. Mount a pen in a holder clipped to the hotend carriage (many printable ones exist; search "Ender 3 pen holder"). Keep the hotend **cold**. The G-code turns heaters off.
+2. Tape the paper to the bed with its bottom-left corner at the bed origin (front-left), or set `--offset XxY`.
+3. Find the Z where the pen just touches the paper (move Z down from the printer menu after homing). Pass it as `--pen-down-z`, e.g. `--pen-down-z 12.5 --pen-up-z 15.5`. A spring-loaded holder is forgiving here.
+4. Print the .gcode from the SD card like any print.
+
+Plotter options:
+
+```
+--gcode FILE          write G-code (+ FILE_preview.png); one file per page
+--page a5             page must fit the bed: a5, a6, postcard, index, or WxH mm (letter/A4 won't fit 220x220)
+--bed 220x220         printable area in mm
+--offset 0x0          where the page's bottom-left corner sits on the bed (mm)
+--pen-down-z 0        Z where the pen touches paper     --pen-up-z 3   Z for travel
+--draw-speed 1500     mm/min while drawing              --travel-speed 4000
+--no-home             skip G28
+```
+
+Writing size matters for plotting. The default 2.4 mm x-height suits a 0.5 mm pen; use `--size 3` or more with thicker pens.
 
 ## Setup
 
@@ -58,11 +89,12 @@ Options:
 --habits 1.0        strength of the writer's personal quirks
 --pen-defects 1.0   0 = flawless pen, 2 = cheap pen
 --fatigue 0.25      how much worse the bottom of the page gets
---mistakes 0.006    per-word chance of a crossed-out typo (0 to disable)
+--mistakes 0        per-word chance of a crossed-out typo (off by default)
 --slant 4           degrees, positive leans right
 --size 2.4          x-height in mm     --line-spacing 7.1 (mm, college ruled)
 --weight 0          -0.2 thin .. 0.2 thick
 --seed N            same seed = same writer and same page
+--page letter|a4|a5|a6|index|postcard|WxH   (mm)
 --no-scan           clean digital output (no tilt/lighting/grain)
 --dpi 300
 --list-fonts
